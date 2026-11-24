@@ -14,9 +14,10 @@ import { AuthProvider } from './context/AuthContext';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import ScrollToTop from './component/ScrollToTop';
+import API_URL from './utils/api.js';
+
 function App() {
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   return (
     <AuthProvider>
@@ -91,7 +92,7 @@ function App() {
                   onSubmit={async e => {
                     e.preventDefault();
                     const email = e.target.email.value;
-                    await fetch(`${apiUrl}/api/subscribers`, {
+                    await fetch(`${API_URL}/api/subscribers`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ email }),

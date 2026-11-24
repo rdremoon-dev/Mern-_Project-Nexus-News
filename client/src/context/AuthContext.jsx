@@ -6,10 +6,9 @@ import {
   useState,
 } from 'react';
 import { io } from 'socket.io-client';
+import API_URL from '../utils/api.js';
 
 const AuthContext = createContext(null);
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const dismissedPostAlertsKey = userId =>
   `nexus_dismissed_post_alerts_${userId}`;

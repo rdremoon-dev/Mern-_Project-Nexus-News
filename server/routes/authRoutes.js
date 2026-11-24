@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
@@ -13,6 +14,30 @@ const signToken = user =>
     process.env.JWT_SECRET,
     { expiresIn: '7d' },
   );
+
+const getFrontendUrl = req => {
+  const allowedOrigins = (process.env.CLIENT_URL || '')
+    .split(',')
+    .map(origin => origin.trim().replace(/\/+$/, ''))
+    .filter(origin => /^https?:\/\//i.test(origin));
+
+  const requestOrigin = req.get('origin')?.trim().replace(/\/+$/, '');
+
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  const fallbackUrl = (process.env.FRONTEND_URL || '')
+    .split(',')[0]
+    ?.trim()
+    .replace(/\/+$/, '');
+
+  if (fallbackUrl && /^https?:\/\//i.test(fallbackUrl)) {
+    return fallbackUrl;
+  }
+
+  return allowedOrigins[0] || 'http://localhost:5173';
+};
 
 // POST /api/auth/register - Register normal verifiable user
 router.post('/register', async (req, res) => {
@@ -45,7 +70,7 @@ router.post('/register', async (req, res) => {
     const rawToken = user.createVerificationToken();
     await user.save();
 
-    const verifyUrl = `${process.env.CLIENT_URL}/verify-email?token=${rawToken}`;
+    const verifyUrl = `${getFrontendUrl(req)}/verify-email?token=${rawToken}`;
 
     try {
       await sendVerificationEmail({
@@ -87,22 +112,34 @@ router.post('/resend-verification', async (req, res) => {
     }
 
     if (user.isVerified) {
-      return res
-        .status(400)
-        .json({
-          message: 'This email is already verified. You can log in now.',
-        });
+      return res.status(400).json({
+        message: 'This email is already verified. You can log in now.',
+      });
     }
 
+    const previousToken = user.verificationToken;
+    const previousExpires = user.verificationTokenExpires;
     const rawToken = user.createVerificationToken();
     await user.save();
 
-    const verifyUrl = `${process.env.CLIENT_URL}/verify-email?token=${rawToken}`;
-    await sendVerificationEmail({
-      to: user.email,
-      name: user.name,
-      verifyUrl,
-    });
+    const verifyUrl = `${getFrontendUrl(req)}/verify-email?token=${rawToken}`;
+
+    try {
+      await sendVerificationEmail({
+        to: user.email,
+        name: user.name,
+        verifyUrl,
+      });
+    } catch (mailError) {
+      console.error('Resend verification email error:', mailError);
+      user.verificationToken = previousToken;
+      user.verificationTokenExpires = previousExpires;
+      await user.save();
+      return res.status(502).json({
+        message:
+          'Could not send a new verification email right now. Please try again shortly.',
+      });
+    }
 
     res.json({
       message: `A new verification link has been sent to ${user.email}.`,
@@ -214,6 +251,10 @@ router.get('/me', protect, async (req, res) => {
 // POST /api/auth/bookmarks/:blogId - Toggle saved post in User Dashboard
 router.post('/bookmarks/:blogId', protect, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.blogId)) {
+      return res.status(400).json({ message: 'Invalid blog ID' });
+    }
+
     const user = await User.findById(req.user._id);
     const exists = user.bookmarks.some(
       id => id.toString() === req.params.blogId,

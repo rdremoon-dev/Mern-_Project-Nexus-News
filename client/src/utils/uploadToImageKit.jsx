@@ -1,9 +1,11 @@
 import ImageKit from 'imagekit-javascript';
 
+import API_URL from './api.js';
+
 export const uploadFileToImageKit = async (
   file,
   token,
-  apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  apiUrl = API_URL,
 ) => {
   const authRes = await fetch(`${apiUrl}/api/imagekit/auth`, {
     headers: {
